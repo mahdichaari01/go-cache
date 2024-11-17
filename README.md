@@ -30,12 +30,6 @@ The implementation ensures thread safety through:
 - Atomic updates for LRU management
 - Safe concurrent access patterns
 
-## Design Decisions
-
-1. **String Keys and Values**: Chosen for simplicity and common use cases
-2. **Mutex vs RWMutex**: Single mutex chosen for simplicity and to prevent potential write starvation
-3. **LRU Implementation**: Custom doubly-linked list for efficient node removal and updates
-
 ## Installation
 
 Clone the repository:
