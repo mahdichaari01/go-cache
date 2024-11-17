@@ -5,34 +5,40 @@ import (
 	"sync"
 )
 
-// Cache Implementation
-// A Circular Doubly Linked List,
+// The implementation uses two main data structures:
+// 1. A circular doubly linked list (circular DLL) for maintaining access order
+// 2. A hashmap for O(1) node lookups
+//
+// The circular DLL design simplifies the code by:
+// - Avoiding explicit tail tracking
+// - Making edge cases (empty list, single node) behave like normal cases
+// - Simplifying head/tail operations
+// Note on circularity: It may affect the readability of some code parts, obscure parts are well commented and documented
+//
+// All operations are O(1) time complexity. Thread safety is ensured through a cache-wide mutex due to operations affecting the overall DS
 
-// CacheNode: In order to o
-type CacheNode struct {
-	prev  *CacheNode
-	next  *CacheNode
+// A node in the Circular-DLL
+type cacheNode struct {
+	prev  *cacheNode
+	next  *cacheNode
 	value string
 	key   string
 }
 
 type LruCache struct {
 	mutex    *sync.Mutex
-	head     *CacheNode
+	head     *cacheNode
 	capacity int
-	store    map[string]*CacheNode
+	store    map[string]*cacheNode
 }
 
 // 	INTERNAL FUNCTIONS
-// 	______________________
-//
-// 	WARNING: 		These function are not supposed to be used outside of this package, they suppose that
-// 					they are being used in a synchronized execution using mutexes
-//
-// 	Operations: 	Add To Head, Remove from List, Add to Tail
+// 	WARNING: 		These function are not supposed to be used outside of this package,
+// 					they suppose that they are being used in a synchronized execution using mutexes
 
-func (cache *LruCache) addToHead(key, value string) *CacheNode {
-	var node CacheNode
+// addToHead creates a new node and makes it the head of the DLL
+func (cache *LruCache) addToHead(key, value string) *cacheNode {
+	var node cacheNode
 	node.value = value
 	node.key = key
 
@@ -53,13 +59,16 @@ func (cache *LruCache) addToHead(key, value string) *CacheNode {
 	return &node
 }
 
-func (cache *LruCache) addToTail(key, value string) *CacheNode {
+// addToTail adds a new node to the end of the DLL
+// It makes use of the circularity of the DLL, it adds the new node to the tail and shifts the head
+func (cache *LruCache) addToTail(key, value string) *cacheNode {
 	node := cache.addToHead(key, value)
 	cache.head = cache.head.next
 	return node
 }
 
-func (cache *LruCache) removeFromList(node *CacheNode) {
+// removeFromList removes a node from the DLL
+func (cache *LruCache) removeFromList(node *cacheNode) {
 	// Handle single node case
 	if node.next == node {
 		cache.head = nil
@@ -76,6 +85,11 @@ func (cache *LruCache) removeFromList(node *CacheNode) {
 	node.next.prev = node.prev
 }
 
+// Public Functions
+// 	______________________
+
+// Get retrieves a value from the cache by its key.
+// It behaves just like map access eg: value,ok:=m[key]
 func (cache *LruCache) Get(key string) (value string, ok bool) {
 	// protect DS
 	cache.mutex.Lock()
@@ -91,12 +105,15 @@ func (cache *LruCache) Get(key string) (value string, ok bool) {
 
 	// update the internals
 	cache.removeFromList(node)
-	newNode := cache.addToHead(key, value)
+	newNode := cache.addToHead(key, node.value)
 	cache.store[key] = newNode
 
 	return node.value, ok
 }
 
+// Set adds or updates a key-value pair in the cache.
+// An assumption has been made: new elements are added to the tail
+// updated elements don't change eviction time
 func (cache *LruCache) Set(key, value string) (updated bool) {
 	// protect DS
 	cache.mutex.Lock()
@@ -122,7 +139,8 @@ func (cache *LruCache) Set(key, value string) (updated bool) {
 	return false
 }
 
-func (cache *LruCache) Delete(key string) (value string, ok bool) {
+// Delete removes the item associated to key, it returns true if element exists, false otherwise
+func (cache *LruCache) Delete(key string) (ok bool) {
 	// protect DS
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
@@ -130,25 +148,33 @@ func (cache *LruCache) Delete(key string) (value string, ok bool) {
 	// check if it exists
 	existing, ok := cache.store[key]
 	if !ok {
-		return "", false
+		return false
 	}
 
 	cache.removeFromList(existing)
 	delete(cache.store, existing.key)
-	return existing.value, true
+	return true
 }
 
+// Getter for cache.capacity
 func (cache *LruCache) Capacity() int {
 	return cache.capacity
 }
 
+// Returns current cache size
+func (cache *LruCache) Len() int {
+	return len(cache.store)
+}
+
+// NewCache creates and returns a new LRU cache with the specified capacity.
+// Returns an error if capacity is less than or equal to zero.
 func NewCache(capacity int) (*LruCache, error) {
 	if capacity <= 0 {
 		return nil, fmt.Errorf("capacity must be greater than 0")
 	}
 
 	var mutex sync.Mutex
-	store := make(map[string]*CacheNode)
+	store := make(map[string]*cacheNode)
 	var cache LruCache = LruCache{
 		mutex:    &mutex,
 		store:    store,
