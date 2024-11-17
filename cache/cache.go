@@ -59,14 +59,6 @@ func (cache *LruCache) addToHead(key, value string) *cacheNode {
 	return &node
 }
 
-// addToTail adds a new node to the end of the DLL
-// It makes use of the circularity of the DLL, it adds the new node to the tail and shifts the head
-func (cache *LruCache) addToTail(key, value string) *cacheNode {
-	node := cache.addToHead(key, value)
-	cache.head = cache.head.next
-	return node
-}
-
 // removeFromList removes a node from the DLL
 func (cache *LruCache) removeFromList(node *cacheNode) {
 	// Handle single node case
@@ -112,8 +104,7 @@ func (cache *LruCache) Get(key string) (value string, ok bool) {
 }
 
 // Set adds or updates a key-value pair in the cache.
-// An assumption has been made: new elements are added to the tail
-// updated elements don't change eviction time
+// Newly Set/Updated Elements are Added/Moved to the head
 func (cache *LruCache) Set(key, value string) (updated bool) {
 	// protect DS
 	cache.mutex.Lock()
@@ -122,21 +113,19 @@ func (cache *LruCache) Set(key, value string) (updated bool) {
 	// check if this an update
 	existing, ok := cache.store[key]
 	if ok {
-		existing.value = value
-		return true
-	}
-
-	// check for evicition
-	if len(cache.store) == cache.capacity {
+		cache.removeFromList(existing)
+		delete(cache.store, existing.key)
+		updated = true
+	} else if len(cache.store) == cache.capacity {
 		tail := cache.head.prev
 		cache.removeFromList(tail)
 		delete(cache.store, tail.key)
 	}
 
 	// add new node
-	node := cache.addToTail(key, value)
+	node := cache.addToHead(key, value)
 	cache.store[key] = node
-	return false
+	return
 }
 
 // Delete removes the item associated to key, it returns true if element exists, false otherwise
